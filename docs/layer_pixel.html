@@ -1,0 +1,211 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="https://github.githubassets.com/favicon.ico">
+    <title>sample vector style</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.8.1/css/ol.css" type="text/css">
+    <style>
+      .map {
+        height: 400px;
+        width: 100%;
+      }
+      .ol-popup {
+        position: absolute;
+        background-color: white;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #cccccc;
+        bottom: 12px;
+        left: -50px;
+        min-width: 200px;
+        font-size: 14px;
+      }
+      .ol-popup:after, .ol-popup:before {
+        top: 100%;
+        border: solid transparent;
+        content: " ";
+        height: 0;
+        width: 0;
+        position: absolute;
+        pointer-events: none;
+      }
+      .ol-popup:after {
+        border-top-color: white;
+        border-width: 10px;
+        left: 48px;
+        margin-left: -10px;
+      }
+      .ol-popup:before {
+        border-top-color: #cccccc;
+        border-width: 11px;
+        left: 48px;
+        margin-left: -11px;
+      }
+      .ol-popup-closer {
+        text-decoration: none;
+        position: absolute;
+        top: 2px;
+        right: 8px;
+      }
+      .ol-popup-closer:after {
+        content: "✖";
+      }
+      .ol-popup dt { 
+        font-weight: bold;
+      }
+      .ol-popup dd { 
+        padding: 0;
+        margin: 0 0 10px 0;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.8.1/build/ol.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.7.5/dist/proj4-src.min.js"></script>
+</head>
+
+<body>
+    <h1>クリックイベントと座標</h1>
+    <!-- 
+      関連サンプル 
+      https://openlayers.org/en/latest/examples/popup.html
+      https://openlayers.org/en/latest/examples/getfeatureinfo-image.html
+      https://openlayers.org/en/latest/examples/graticule.html
+    -->
+    <div id="popup" class="ol-popup">
+      <a href="#" id="popup-closer" class="ol-popup-closer"></a>
+      <div id="popup-content"></div>
+    </div>
+    <div id="map" class="map"></div>
+    <script type="text/javascript">
+        const container = document.getElementById('popup');
+        const content = document.getElementById('popup-content');
+        const closer = document.getElementById('popup-closer');
+        const overlay = new ol.Overlay({
+          element: container, // ここで渡した時点でbody内からcontainer要素が一度消える
+        });
+        const closeOverlay = function () {
+          overlay.setPosition(undefined);
+          closer.blur();
+          return false;
+        };
+        closer.onclick = closeOverlay;    
+
+        const polygon = {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [0, 0], [90, 0], [90, 60], [0, 60], [0, 0]
+              ]
+            ],
+          },
+        };
+        const vectorSource = new ol.source.Vector();
+        vectorSource.addFeature(new ol.format.GeoJSON({
+          dataProjection: "EPSG:4326",
+          featureProjection: "EPSG:3857",
+        }).readFeature(polygon));
+    
+        const map = new ol.Map({
+          target: 'map',
+          overlays: [overlay],
+          layers: [
+            new ol.layer.Tile({
+              source: new ol.source.XYZ({
+                url: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg",
+                attributions: "国土地理院(https://maps.gsi.go.jp/development/ichiran.html)",
+                tilePixelRatio: window && window.devicePixelRatio ? window.devicePixelRatio : 1
+                //  TileLayerをVectorLayerと一緒に表示してかつmap.forEachLayerAtPixelで値を拾うときは
+                // tilePixelRatioを適切に設定していないとうまく動かないケースがある
+              }),
+              properties: {
+                id: "Tile"
+              },
+            }),
+            new ol.layer.Vector({
+              source: vectorSource,
+              style: new ol.style.Style({
+                fill: new ol.style.Fill({
+                  color: "rgba(0, 255, 0, 0.5)",
+                }),
+                stroke: new ol.style.Stroke({
+                  color: "rgba(0, 255, 0, 1)",
+                  width: 1,
+                }),
+              }),
+              extent: ol.proj.transformExtent([0,0,90,60], "EPSG:4326", "EPSG:3857"),
+              id: "Vector"
+            }),
+            new ol.layer.Graticule({
+              strokeStyle: new ol.style.Stroke({
+                color: "rgba(255,0,0,0.9)",
+                width: 3,
+                lineDash: [0.5, 4],
+              }),
+              showLabels: true,
+              id: "Graticule"
+            })
+          ],
+          view: new ol.View({
+            center: ol.proj.fromLonLat([40, 40]),
+            zoom: 1
+          }),
+        });
+
+        map.on('singleclick', function (evt) {
+          let layers= "";
+          map.forEachLayerAtPixel(map.getEventPixel(evt.originalEvent), (layer) => {
+            const id = layer.get('id');
+            layers += id + ",";
+
+            return false; // trueを返すと初めにヒットしたレイヤーで処理が止まる
+          }, {
+            layerFilter: (layer) => {
+              const extent = layer.getExtent();
+              // layerにextentが設定されていた場合、クリックがextent内か判定
+              return !Array.isArray(extent) ||
+                ol.extent.containsCoordinate(extent, evt.coordinate);
+            }
+          });
+          if(layers.length > 1)
+            layers = layers.slice(0, layers.length - 1);
+
+          content.innerHTML =  `
+            <dl>
+              <dt>
+                pixel
+              </dt>
+              <dd>
+                ${JSON.stringify(map.getEventPixel(evt.originalEvent))}
+              </dd> 
+              <dt>
+                lon/lat
+              </dt>
+              <dd>
+                ${JSON.stringify(ol.proj.toLonLat(evt.coordinate))}
+              </dd> 
+              <dt>
+                EPSG:3857での座標
+              </dt>
+              <dd>
+                ${JSON.stringify(evt.coordinate)}
+              </dd> 
+              <dt>
+                クリックしたレイヤー(上から順)
+              </dt>
+              <dd>
+                ${layers}
+              </dd> 
+            </dl>
+          `;
+          overlay.setPosition(evt.coordinate);
+        });
+    </script>
+</body>
+</html>

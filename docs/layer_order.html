@@ -1,0 +1,238 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="https://github.githubassets.com/favicon.ico">
+    <title>sample layer order</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.8.1/css/ol.css" type="text/css">
+    <style>
+      .map {
+        height: 400px;
+        width: 100%;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.8.1/build/ol.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.7.5/dist/proj4-src.min.js"></script>
+</head>
+
+<body>
+    <h1>レイヤーの重なり順</h1>
+    <!-- 
+      関連サンプル 
+      https://openlayers.org/en/latest/examples/layer-z-index.html
+      https://openlayers.org/en/latest/examples/layer-group.html
+    -->
+    <div>
+      <select id="order">
+        <option value="asc" selected>正順</option>
+        <option value="desc">逆順</option>
+        <option value="cover">ベースマップを前面に移動する</option>
+      </select>
+    </div>
+    <div id="map" class="map"></div>
+    <div id="list"></div>
+    <script type="text/javascript">
+        const vectorSource1 = new ol.source.Vector();
+        vectorSource1.addFeature(new ol.format.GeoJSON({
+          dataProjection: "EPSG:4326",
+          featureProjection: "EPSG:3857",
+        }).readFeature({
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [0, 5], [100, 5], [100, 65], [0, 65], [0, 5]
+              ]
+            ],
+          },
+        }));
+        const vectorSource2 = new ol.source.Vector();
+        vectorSource2.addFeature(new ol.format.GeoJSON({
+          dataProjection: "EPSG:4326",
+          featureProjection: "EPSG:3857",
+        }).readFeature({
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [40, -10], [80, -10], [80, 20], [40, 20], [40, -10]
+              ]
+            ],
+          },
+        }));
+        const vectorSource3 = new ol.source.Vector();
+        vectorSource3.addFeature(new ol.format.GeoJSON({
+          dataProjection: "EPSG:4326",
+          featureProjection: "EPSG:3857",
+        }).readFeature({
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [50, 0], [70, 0], [70, 10], [50, 10], [50, 0]
+              ]
+            ],
+          },
+        }));
+        const vectorSource4 = new ol.source.Vector();
+        vectorSource4.addFeature(new ol.format.GeoJSON({
+          dataProjection: "EPSG:4326",
+          featureProjection: "EPSG:3857",
+        }).readFeature({
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [45, -5], [85, -5], [85, 25], [45, 25], [45, -5]
+              ]
+            ],
+          },
+        }));
+
+        const layer1 = new ol.layer.Tile({
+          source: new ol.source.OSM(),
+          properties: {
+            id: "layer1"
+          },
+          zIndex: 0
+        });
+        const layer2 = new ol.layer.Vector({
+          source: vectorSource1,
+          style: new ol.style.Style({
+            fill: new ol.style.Fill({
+              color: "rgba(128, 128, 128, 0.5)",
+            }),
+            stroke: new ol.style.Stroke({
+              color: "rgba(128, 128, 128, 1)",
+              width: 1,
+            }),
+          }),
+          properties: {
+            id: "layer2"
+          },
+          zIndex: 1
+        });
+        const layer3 = new ol.layer.Tile({
+          source: new ol.source.XYZ({
+            url: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg",
+            attributions: "国土地理院(https://maps.gsi.go.jp/development/ichiran.html)",
+          }),
+          extent: ol.proj.transformExtent([60, -20, 120, 50], "EPSG:4326", "EPSG:3857"),
+          properties: {
+            id: "layer3"
+          },
+          zIndex: 2
+        });
+
+        const layer4 =  new ol.layer.Group({
+          layers: [
+            new ol.layer.Vector({
+              source: vectorSource2,
+              style: new ol.style.Style({
+                fill: new ol.style.Fill({
+                  color: "rgba(255, 0, 0, 0.7)",
+                }),
+                stroke: new ol.style.Stroke({
+                  color: "rgba(255, 0, 0, 1)",
+                  width: 2,
+                }),
+              }),
+              properties: {
+                id: "layer4_1"
+              }
+            }),
+            new ol.layer.Vector({
+              source: vectorSource3,
+              style: new ol.style.Style({
+                fill: new ol.style.Fill({
+                  color: "rgba(0, 0, 255, 0.7)",
+                }),
+                stroke: new ol.style.Stroke({
+                  color: "rgba(0, 0, 255, 1)",
+                  width: 2,
+                }),
+              }),
+              properties: {
+                id: "layer4_2"
+              },
+              zIndex: 100 // 最前面
+            }),
+            new ol.layer.Vector({
+              source: vectorSource4,
+              style: new ol.style.Style({
+                fill: new ol.style.Fill({
+                  color: "rgba(0, 255, 0, 0.7)",
+                }),
+                stroke: new ol.style.Stroke({
+                  color: "rgba(0, 255, 0, 1)",
+                  width: 2,
+                }),
+              }),
+              properties: {
+                id: "layer4_3"
+              }
+            })
+          ],
+          properties: {
+            id: "layer4"
+          },
+          zIndex: 3
+        });
+
+        const map = new ol.Map({
+          target: "map",
+          layers: [
+            layer1, layer2, layer3, layer4
+          ],
+          view: new ol.View({
+              center: ol.proj.fromLonLat([60, 20]),
+              zoom: 2,
+          })
+        });
+
+        const layerOrderList = (arr) => {
+          return "<ul>" + 
+            (arr || map.getLayers().getArray()).reduce((prev, layer)=>{
+              let child = "";
+              if(typeof layer.getLayers === "function") {
+                child = layerOrderList(layer.getLayers().getArray());
+              }
+
+              return prev + 
+                `<li>
+                  <div>${layer.getProperties().id}: ${layer.getZIndex()}</div>${child}
+                </li>`
+            }, "")
+            + "</ul>";
+        };
+        document.getElementById("list").innerHTML = layerOrderList();
+
+        document.getElementById("order").addEventListener("change", (e)=>{
+          if(e.target.value === "asc") {
+            layer1.setZIndex(0);
+            layer2.setZIndex(1);
+            layer3.setZIndex(2);
+            layer4.setZIndex(3);
+          } 
+          else if(e.target.value === "desc") {
+            layer1.setZIndex(0);
+            layer2.setZIndex(3);
+            layer3.setZIndex(2);
+            layer4.setZIndex(1);
+          }
+          else {
+            layer1.setZIndex(10);
+          }
+          document.getElementById("list").innerHTML = layerOrderList();
+        });
+    </script>
+</body>
+</html>

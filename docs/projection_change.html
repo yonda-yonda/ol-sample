@@ -1,0 +1,166 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="https://github.githubassets.com/favicon.ico">
+    <title>sample projection change</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.8.1/css/ol.css" type="text/css">
+    <style>
+      .map {
+        height: 600px;
+        width: 100%;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.8.1/build/ol.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.7.5/dist/proj4-src.min.js"></script>
+</head>
+
+<body>
+    <h1>投影を切り替える</h1>
+    <!-- 
+      関連サンプル 
+      https://openlayers.org/en/latest/examples/reprojection.html
+      https://openlayers.org/en/latest/examples/geojson.html
+      https://openlayers.org/en/latest/examples/layer-extent.html
+    -->
+    <div>
+      <select id="proj">
+        <option value="EPSG:3857" selected>EPSG:3857</option>
+        <option value="EPSG:3411">EPSG:3411</option>
+      </select>
+    </div>
+    <div id="map" class="map"></div>
+    <script type="text/javascript">
+        // EPSG:4326の座標で記述されたポリゴン
+        const polygon1 = {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [0, 0], [100, 0], [100, 60], [0, 60], [0, 0]
+              ]
+            ],
+          },
+        };
+        // EPSG:3411の座標で記述されたポリゴン
+        const polygon2 = {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [234300, -608000],
+                [-1286000, -7000000],
+                [3780000, -2940000],
+                [234300, -608000],
+              ]
+            ],
+          },
+        };
+
+        const getView = (code) => {
+          const targetProj =  code ? ol.proj.get(code) : "EPSG:3857";
+          return new ol.View({
+              projection: targetProj,
+              center: [0, 0],
+              zoom: 2,
+          });
+        };
+        const getGeoJson = (options) => {
+          const {srcCode, dstCode} = Object.assign({
+            srcCode:"EPSG:4326", dstCode:"EPSG:3857"
+          }, options);
+
+          return new ol.format.GeoJSON({
+            dataProjection: srcCode,
+            featureProjection: dstCode,
+          });
+        };
+        const transformExtent = (extent, options) => {
+          const {srcCode, dstCode} = Object.assign({
+            srcCode:"EPSG:4326", dstCode:"EPSG:3857"
+          }, options);
+          return ol.proj.transformExtent(extent, srcCode, dstCode);
+        }
+
+        (async ()=>{
+          const proj4Def = await fetch("./proj4def.json")
+            .then(response => response.json());
+          proj4.defs(
+            "EPSG:3411",
+            proj4Def["EPSG:3411"]
+          );
+          ol.proj.proj4.register(proj4);
+
+          const rasterExtent = [80, 20, 120, 50];
+          const rasterLayer = new ol.layer.Tile({
+            source: new ol.source.XYZ({
+              url: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg",
+              attributions: "国土地理院(https://maps.gsi.go.jp/development/ichiran.html)",
+            }),
+            extent: transformExtent(rasterExtent)
+          });
+
+          const vectorSource1 = new ol.source.Vector();
+          vectorSource1.addFeature(getGeoJson().readFeature(polygon1));
+          const vectorSource2 = new ol.source.Vector();
+          vectorSource2.addFeature(getGeoJson({srcCode: "EPSG:3411"}).readFeature(polygon2));
+          const map = new ol.Map({
+            target: "map",
+            layers: [
+                new ol.layer.Tile({
+                  source: new ol.source.OSM(),
+                }),
+                rasterLayer,
+                new ol.layer.Vector({
+                  source: vectorSource1,
+                  style: new ol.style.Style({
+                    fill: new ol.style.Fill({
+                      color: "rgba(255, 0, 0, 0.4)",
+                    }),
+                    stroke: new ol.style.Stroke({
+                      color: "rgba(255, 0, 0, 1)",
+                      width: 5,
+                    }),
+                  })
+                }),
+                new ol.layer.Vector({
+                  source: vectorSource2,
+                  style: new ol.style.Style({
+                    fill: new ol.style.Fill({
+                      color: "rgba(0, 255, 0, 0.4)",
+                    }),
+                    stroke: new ol.style.Stroke({
+                      color: "rgba(0, 255, 0, 1)",
+                      width: 5,
+                    }),
+                  })
+                })
+            ],
+            view: getView()
+          });
+
+          document.getElementById("proj").addEventListener("change", (e)=>{
+            const code = e.target.value;
+            const newView = getView(code);
+            map.setView(newView);
+
+            // 投影法を切り替えるたびにsourceをクリアして新しい座標系で記述されたfeatureで書き換える
+            vectorSource1.clear();
+            vectorSource1.addFeature(getGeoJson({dstCode: code}).readFeature(polygon1));
+            vectorSource2.clear();
+            vectorSource2.addFeature(getGeoJson({srcCode: "EPSG:3411", dstCode: code}).readFeature(polygon2));
+
+            // 投影法を切り替えるたびにextentを設定し直す
+            console.log(code, transformExtent(rasterExtent, {dstCode: code}));
+            rasterLayer.setExtent(transformExtent(rasterExtent, {dstCode: code}));
+          });
+      })();
+    </script>
+</body>
+</html>

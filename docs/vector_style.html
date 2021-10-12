@@ -1,0 +1,185 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="https://github.githubassets.com/favicon.ico">
+    <title>sample vector style</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.8.1/css/ol.css" type="text/css">
+    <style>
+      .map {
+        height: 400px;
+        width: 100%;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.8.1/build/ol.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.7.5/dist/proj4-src.min.js"></script>
+</head>
+
+<body>
+    <h1>GeoJSONのスタイルを個別調整</h1>
+    <!-- 
+      関連サンプル 
+      https://openlayers.org/en/latest/examples/polygon-styles.html
+      https://openlayers.org/en/latest/examples/select-hover-features.html
+      https://openlayers.org/en/latest/examples/webgl-points-layer.html
+    -->
+
+    <div id="map" class="map"></div>
+    <script type="text/javascript">
+        const labels = ["aaa", "bbb", "ccc"]
+        const geojson1 = {
+          "type": "FeatureCollection",
+          "features": []
+        };
+        for(let i=0; i<1000; i++) {
+          const lon = 360 * Math.random() - 180;
+          const lat = 160 * Math.random() - 80;
+          const width = Math.floor(4 * Math.random());
+          const r = Math.floor(256 * Math.random());
+          const g = Math.floor(256 * Math.random());
+          const b = Math.floor(256 * Math.random());
+
+          geojson1.features.push({
+            "type": "Feature",
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [lon, lat + 5], [lon - 4, lat - 2], [lon + 4, lat - 2], [lon, lat + 5]
+                ]
+              ],
+            },
+            "properties": {
+              r, g, b, width
+            }
+          })
+        }
+        const geojson2 = {
+          "type": "FeatureCollection",
+          "features": []
+        };
+        for(let i=0; i<1000; i++) {
+          const lon = 360 * Math.random() - 180;
+          const lat = 160 * Math.random() - 80;
+          const text = labels[Math.floor(4 * Math.random())]
+
+          geojson2.features.push({
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [lon, lat]
+            },
+            "properties": {
+              text
+            }
+          })
+        }
+
+        // Feature個別にスタイルを設定しておく
+        const vectorSource1 = new ol.source.Vector({
+          features: geojson1.features.map((feature)=>{
+            const obj =  new ol.Feature(new ol.geom.Polygon(feature.geometry.coordinates));
+            obj.setStyle(
+              new ol.style.Style({
+                fill: new ol.style.Fill({
+                  color: `rgba(${feature.properties.r}, ${feature.properties.g}, ${feature.properties.b}, 0.5)`,
+                }),
+                stroke: new ol.style.Stroke({
+                  color: `rgba(${feature.properties.r}, ${feature.properties.g}, ${feature.properties.b}, 1)`,
+                  width: feature.properties.width,
+                })
+              })
+            );
+            return obj
+          })
+        });
+
+        // Featureにはスタイル未設定
+        const vectorSource2 = new ol.source.Vector();
+        vectorSource2.addFeatures(new ol.format.GeoJSON({
+          dataProjection: "EPSG:4326",
+          featureProjection: "EPSG:4326",
+        }).readFeatures(geojson2));
+
+        const layer1 = new ol.layer.Tile({
+          source: new ol.source.OSM(),
+        });
+
+        const layer2 = new ol.layer.Vector({
+          id: "polygon",
+          source: vectorSource1,
+          // sourceのFeatureに設定されたstyleが優先される
+          style: new ol.style.Style({
+            fill: new ol.style.Fill({
+              color: `rgba(0, 0, 255, 0.5)`,
+            }),
+            stroke: new ol.style.Stroke({
+              color: `rgba(0, 255,0 , 1)`,
+              width: 1,
+            })
+          }) 
+        });
+
+        const layer3 = new ol.layer.Vector({
+          id: "text",
+          source: vectorSource2,
+          // レイヤーにスタイルを設定する。
+          // 関数を渡すことで、描画時にFeatureの値によってスタイルを変えることができる。
+          style: (featureObj)=>{
+            const {
+              text
+            } = featureObj.getProperties();
+            return new ol.style.Style({
+              text: new ol.style.Text({
+                text,
+                stroke: new ol.style.Stroke({color: "#fff", width: 2}),
+                font: "bold 12px sans-serif"
+              })
+            })
+          }
+        });
+
+        const map = new ol.Map({
+          target: "map",
+          layers: [
+            layer1, layer2, layer3
+          ],
+          view: new ol.View({
+              projection: "EPSG:4326",
+              center: [0, 0],
+              zoom: 1,
+          })
+        });
+
+        let selected = null;
+        map.on('pointermove', (e) => {
+          if (selected) {
+            selected.setStyle(undefined);
+            selected = null;
+          }
+
+          map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
+            selected = feature;
+            feature.setStyle(new ol.style.Style({
+              text: new ol.style.Text({
+                text: feature.getProperties().text,
+                stroke: new ol.style.Stroke({color: "#fff", width: 2}),
+                font: "bold 24px sans-serif"
+              })
+            }));
+            return true;
+          }, {
+            layerFilter: (layer) => {
+              const id = layer.get("id");
+              // textレイヤーのfeatureのみスタイルを変える
+              return id === "text";
+            }
+          });
+        });
+    </script>
+</body>
+</html>

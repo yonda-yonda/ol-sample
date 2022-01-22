@@ -1,0 +1,180 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="https://github.githubassets.com/favicon.ico">
+    <title>sample cog reprojection</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.12.0/css/ol.css" type="text/css">
+    <style>
+      .map {
+        height: 600px;
+        width: 100%;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.12.0/build/ol.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/proj4@2.7.5/dist/proj4-src.min.js"></script>
+</head>
+
+<body>
+    <h1>GeoTIFFをEPSG:3857に投影変換して表示する</h1>
+
+    <div id="map" class="map"></div>
+    <script type="text/javascript">
+        (async ()=>{
+          const map = new ol.Map({
+            target: "map",
+            layers: [
+              new ol.layer.Tile({
+                source: new ol.source.OSM()
+              }),
+            ],
+            view: new ol.View({
+              center: [0,0],
+              zoom: 0,
+            }),
+          });
+
+
+          const proj4Def = await fetch("./proj4def.json")
+            .then(response => response.json());
+
+          const setLayer = async (
+              map,
+              source
+            ) => {
+              /*
+                refer to https://github.com/openlayers/openlayers/issues/13197
+              */
+              const sourceView = await source.getView();
+              const sourceProjection = sourceView.projection;
+              if (!(sourceProjection instanceof ol.proj.Projection)) {
+                return;
+              }
+              const code = sourceProjection.getCode();
+
+              // console.log(code); // EPSG:32636
+              // codeがprojで未定義の場合ベースマップが崩れてしまうので登録する
+              if(!ol.proj.get(code)) {
+                // https://www.npmjs.com/package/epsg-index の利用を推奨
+                const def = proj4Def[code];
+
+                if(def) {
+                  proj4.defs(
+                    code,
+                    def
+                  );
+                  ol.proj.proj4.register(proj4);
+                }
+              }
+              const tileGrid = source.getTileGrid();
+              const imageSource = new ol.source.XYZ({
+                tileGrid: tileGrid,
+                url: "{z},{x},{y}",
+                interpolate: false,
+                tileLoadFunction: function (imageTile, coordString) {
+                  const coord = coordString.split(",").map(Number);
+                  const tile = source.getTile(
+                    coord[0],
+                    coord[1],
+                    coord[2],
+                    1,
+                    sourceProjection
+                  );
+
+                  const setImage = function () {
+                    const tilesize = ol.size.toSize(tileGrid.getTileSize(coord[0]));
+                    const canvas = document.createElement("canvas");
+                    canvas.width = tilesize[0];
+                    canvas.height = tilesize[1];
+                    const context = canvas.getContext("2d");
+                    if (!context) return;
+                    const imgData = context.getImageData(
+                      0,
+                      0,
+                      canvas.width,
+                      canvas.height
+                    );
+
+                    const pixels = imgData.data;
+                    const data = tile.getData();
+                    if (data instanceof DataView) return;
+                    const l = data.length;
+                    for (let i = 0; i < l; i++) {
+                      pixels[i] = data[i];
+                    }
+                    context.putImageData(imgData, 0, 0);
+                    imageTile.getImage().src = canvas.toDataURL();
+                  };
+
+                  const tileState = tile.getState();
+                  if (tileState === 2) {
+                    setImage();
+                  } else {
+                    const tileListener = () => {
+                      const tileState = tile.getState();
+                      if (tileState !== 1) {
+                        tile.removeEventListener("change", tileListener);
+
+                        if (tileState === 2) {
+                          setImage();
+                        }
+                      }
+                    };
+                    tile.addEventListener("change", tileListener);
+                    tile.load();
+                  }
+                },
+                projection: sourceProjection,
+              });
+
+              const layer = new ol.layer.WebGLTile({
+                source: imageSource,
+              });
+              map.addLayer(layer);
+
+              const originExtent = sourceView.extent;
+              if (originExtent) {
+                const transformed = ol.proj.transformExtent(originExtent, code, "EPSG:3857");
+
+                if (transformed[0] > transformed[2])
+                  transformed[2] += proj4("EPSG:4326", "EPSG:3857", [180, 0])[0] * 2;
+
+                map.getView().fit(transformed, {
+                  padding: [40, 20, 40, 20],
+                  maxZoom: 20,
+                });
+              }
+            };
+
+          const source = new ol.source.GeoTIFF({
+            sources: [
+              {
+                url: "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/2020/S2A_36QWD_20200701_0_L2A/TCI.tif",
+                nodata: 0,
+              },
+            ],
+          });
+          const sourceState = source.getState();
+          if (sourceState === "ready") {
+            setLayer(map, source);
+          } else {
+            const sourceListener = () => {
+              const sourceState = source.getState();
+              if (sourceState === "error") {
+                source.removeEventListener("change", sourceListener);
+              }
+              if (sourceState === "ready") {
+                source.removeEventListener("change", sourceListener);
+                setLayer(map, source);
+              }
+            };
+            source.addEventListener("change", sourceListener);
+          }
+        })();
+    </script>
+</body>
+</html>

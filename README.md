@@ -1,6 +1,6 @@
 # OpenLayers TIPS
 
-[OpenLayers](https://openlayers.org/) v6.8.1
+[OpenLayers](https://openlayers.org/) v8.1.0
 
 
 * [layer_pixel](https://yonda-yonda.github.io/ol-sample/layer_pixel.html)
